@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Housing Price Prediction Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 font-sans leading-normal tracking-normal">
+
+    <!-- Navigation -->
+    <header class="bg-blue-600 text-white shadow">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold flex items-center">
+                📊 <span class="ml-2">Analytics</span>
+            </h1>
+            <nav class="flex space-x-4">
+                <a href="{% url 'predictor:dashboard' %}" class="flex items-center text-white hover:underline">
+                    <span class="material-icons mr-1"></span> Dashboard
+                </a>
+                <a href="{% url 'predictor:predict' %}" class="flex items-center text-white hover:underline">
+                    <span class="material-icons mr-1"></span> Predict
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="bg-blue-500 text-white py-16">
+        <div class="max-w-7xl mx-auto text-center">
+            <h2 class="text-4xl font-bold mb-4">Your Prediction Analytics</h2>
+            <p class="text-lg mb-6">Analyze your housing price predictions and gain insights.</p>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto mt-10 p-6 bg-white rounded-lg shadow">
+        <!-- Statistics Summary -->
+        <section class="stats-summary mb-10">
+            <h3 class="text-2xl font-bold text-gray-800 mb-6 text-center">📈 Prediction Statistics</h3>
+            <div class="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+                <div class="stat-card bg-blue-100 p-6 rounded-lg shadow text-center hover:bg-blue-200 transition duration-200">
+                    <h4 class="text-lg font-semibold text-blue-700 flex items-center justify-center">
+                        <span class="material-icons mr-2">analytics</span> Total Predictions
+                    </h4>
+                    <p id="totalPredictions" class="stat-value text-3xl font-bold text-blue-800 mt-2">0</p>
+                </div>
+                <div class="stat-card bg-red-100 p-6 rounded-lg shadow text-center hover:bg-red-200 transition duration-200">
+                    <h4 class="text-lg font-semibold text-red-700 flex items-center justify-center">
+                        <span class="material-icons mr-2">trending_up</span> Highest Price
+                    </h4>
+                    <p id="maxPrice" class="stat-value text-3xl font-bold text-red-800 mt-2">$0</p>
+                </div>
+                <div class="stat-card bg-yellow-100 p-6 rounded-lg shadow text-center hover:bg-yellow-200 transition duration-200">
+                    <h4 class="text-lg font-semibold text-yellow-700 flex items-center justify-center">
+                        <span class="material-icons mr-2">trending_down</span> Lowest Price
+                    </h4>
+                    <p id="minPrice" class="stat-value text-3xl font-bold text-yellow-800 mt-2">$0</p>
+                </div>
+                <div class="stat-card bg-indigo-100 p-6 rounded-lg shadow text-center hover:bg-indigo-200 transition duration-200">
+                    <h4 class="text-lg font-semibold text-indigo-700 flex items-center justify-center">
+                        <span class="material-icons mr-2">star</span> Most Used Model
+                    </h4>
+                    <p id="mostUsedModel" class="stat-value text-xl font-bold text-indigo-800 mt-2">N/A</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Charts Section -->
+        <section class="charts">
+            <h3 class="text-2xl font-bold text-gray-800 mb-6 text-center">📊 Charts</h3>
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="chart-container p-4 bg-gray-50 rounded-lg shadow hover:shadow-lg transition duration-200">
+                    <h4 class="text-xl font-semibold text-gray-800 mb-4">Price Prediction History</h4>
+                    <canvas id="priceHistoryChart"></canvas>
+                </div>
+                <div class="chart-container p-4 bg-gray-50 rounded-lg shadow hover:shadow-lg transition duration-200">
+                    <h4 class="text-xl font-semibold text-gray-800 mb-4">Price Distribution</h4>
+                    <canvas id="priceDistributionChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prediction History Section -->
+        <section class="prediction-history mt-10">
+            <h3 class="text-2xl font-bold text-gray-800 mb-6 text-center">📜 Detailed Prediction History</h3>
+            <div class="history-table-container overflow-x-auto bg-gray-50 p-4 rounded-lg shadow hover:shadow-lg transition duration-200">
+                <table class="history-table w-full table-auto">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Date</th>
+                            <th class="px-4 py-2 text-left">Price</th>
+                            <th class="px-4 py-2 text-left">Model</th>
+                            <th class="px-4 py-2 text-left">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="predictionHistoryBody">
+                        <!-- Filled dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const storedPredictions = JSON.parse(localStorage.getItem('predictions') || '[]').reverse();
+
+        const formatPrice = (price) => {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                maximumFractionDigits: 0
+            }).format(price);
+        };
+
+        const formatDate = (dateString) => {
+            return new Date(dateString).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        };
+
+        const updateStatistics = () => {
+            const total = storedPredictions.length;
+            document.getElementById('totalPredictions').textContent = total;
+
+            if (total > 0) {
+                const prices = storedPredictions.map(p => p.price);
+                const max = Math.max(...prices);
+                const min = Math.min(...prices);
+
+                const modelCounts = storedPredictions.reduce((acc, p) => {
+                    acc[p.model] = (acc[p.model] || 0) + 1;
+                    return acc;
+                }, {});
+                const mostUsedModel = Object.keys(modelCounts).reduce((a, b) => modelCounts[a] > modelCounts[b] ? a : b);
+
+                document.getElementById('maxPrice').textContent = formatPrice(max);
+                document.getElementById('minPrice').textContent = formatPrice(min);
+                document.getElementById('mostUsedModel').textContent = mostUsedModel || 'N/A';
+            }
+        };
+
+        const updateHistoryTable = () => {
+            let historyHTML = '';
+
+            storedPredictions.forEach(prediction => {
+                const details = Object.entries(prediction.formData || {})
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join(', ');
+
+                historyHTML += `
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="px-4 py-2">${formatDate(prediction.timestamp)}</td>
+                        <td class="px-4 py-2 font-medium">${formatPrice(prediction.price)}</td>
+                        <td class="px-4 py-2">${prediction.model || 'Default'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-600" title="${details}">
+                            ${details.substring(0, 30)}${details.length > 30 ? '...' : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('predictionHistoryBody').innerHTML = historyHTML || 
+                '<tr><td colspan="4" class="px-4 py-2 text-center text-gray-500">No predictions yet</td></tr>';
+        };
+
+        const createCharts = () => {
+            const historyCtx = document.getElementById('priceHistoryChart').getContext('2d');
+            new Chart(historyCtx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Predicted Price',
+                        data: storedPredictions.map(p => ({
+                            x: new Date(p.timestamp),
+                            y: p.price
+                        })),
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                tooltipFormat: 'MMM d, yyyy h:mm a'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Price'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return formatPrice(value);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatPrice(context.raw.y);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (storedPredictions.length > 0) {
+                const distributionCtx = document.getElementById('priceDistributionChart').getContext('2d');
+                const maxPrice = Math.max(...storedPredictions.map(p => p.price));
+                const rangeSize = Math.ceil(maxPrice / 5 / 50000) * 50000;
+                const ranges = [];
+
+                for (let i = 0; i < 5; i++) {
+                    const min = i * rangeSize;
+                    const max = (i + 1) * rangeSize;
+                    ranges.push({
+                        range: `${formatPrice(min)} - ${formatPrice(max)}`,
+                        count: storedPredictions.filter(p => p.price >= min && p.price < max).length
+                    });
+                }
+
+                new Chart(distributionCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ranges.map(r => r.range),
+                        datasets: [{
+                            label: 'Number of Predictions',
+                            data: ranges.map(r => r.count),
+                            backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                            borderColor: 'rgba(16, 185, 129, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        };
+
+        updateStatistics();
+        updateHistoryTable();
+        createCharts();
+    </script>
+</body>
+</html>
